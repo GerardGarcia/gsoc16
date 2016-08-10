@@ -1,0 +1,52 @@
+From c9a07cdc46d3b70549673042bfc0b8678bce12e3 Mon Sep 17 00:00:00 2001
+From: Gerard Garcia <ggarcia@deic.uab.cat>
+Date: Mon, 1 Aug 2016 17:08:35 +0200
+Subject: [PATCH v2 1/1] Fix unbound rx buffer
+
+Reset connection and close rx socket when the sender is ignoring our announced available buffer.
+
+Signed-off-by: Gerard Garcia <ggarcia@deic.uab.cat>
+
+---
+v2:
+ * Get vvs->rx_lock lock before checking if next packet is going to
+    overflow the rx buffer.
+
+ net/vmw_vsock/virtio_transport_common.c | 20 +++++++++++++++-----
+ 1 file changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/net/vmw_vsock/virtio_transport_common.c b/net/vmw_vsock/virtio_transport_common.c
+index a53b3a1..8d4abb6 100644
+--- a/net/vmw_vsock/virtio_transport_common.c
++++ b/net/vmw_vsock/virtio_transport_common.c
+@@ -774,12 +774,22 @@ virtio_transport_recv_connected(struct sock *sk,
+ 		pkt->off = 0;
+ 
+ 		spin_lock_bh(&vvs->rx_lock);
+-		virtio_transport_inc_rx_pkt(vvs, pkt);
+-		list_add_tail(&pkt->list, &vvs->rx_queue);
+-		spin_unlock_bh(&vvs->rx_lock);
++		if (vvs->rx_bytes + pkt->len <= vvs->buf_size) {
++			virtio_transport_inc_rx_pkt(vvs, pkt);
++			list_add_tail(&pkt->list, &vvs->rx_queue);
++			spin_unlock_bh(&vvs->rx_lock);
++
++			sk->sk_data_ready(sk);
++			return err;
++		} else {
++			/* Sender is ignoring our buf_alloc */
++			spin_unlock_bh(&vvs->rx_lock);
++
++			virtio_transport_reset(vsk, pkt);
++			virtio_transport_do_close(vsk, true);
++			break;
++		}
+ 
+-		sk->sk_data_ready(sk);
+-		return err;
+ 	case VIRTIO_VSOCK_OP_CREDIT_UPDATE:
+ 		sk->sk_write_space(sk);
+ 		break;
+-- 
+2.9.1
+

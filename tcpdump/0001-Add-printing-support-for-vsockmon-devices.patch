@@ -1,0 +1,271 @@
+From 82c9c58d7fba8490444008759e84beeb0cacbbbe Mon Sep 17 00:00:00 2001
+From: Gerard Garcia <ggarcia@deic.uab.cat>
+Date: Tue, 14 Jun 2016 16:45:44 +0200
+Subject: [RFC 1/1] Add printing support for vsockmon devices.
+
+---
+ Makefile.in   |   1 +
+ netdissect.h  |   1 +
+ print-vsock.c | 211 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ print.c       |   3 +
+ 4 files changed, 216 insertions(+)
+ create mode 100644 print-vsock.c
+
+diff --git a/Makefile.in b/Makefile.in
+index 4a97d87..90afeb6 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -225,6 +225,7 @@ LIBNETDISSECT_SRC=\
+ 	print-vjc.c \
+ 	print-vqp.c \
+ 	print-vrrp.c \
++	print-vsock.c \
+ 	print-vtp.c \
+ 	print-vxlan.c \
+ 	print-vxlan-gpe.c \
+diff --git a/netdissect.h b/netdissect.h
+index 1febc88..f45abce 100644
+--- a/netdissect.h
++++ b/netdissect.h
+@@ -435,6 +435,7 @@ extern u_int symantec_if_print IF_PRINTER_ARGS;
+ extern u_int token_if_print IF_PRINTER_ARGS;
+ extern u_int usb_linux_48_byte_print IF_PRINTER_ARGS;
+ extern u_int usb_linux_64_byte_print IF_PRINTER_ARGS;
++extern u_int vsock_print IF_PRINTER_ARGS;
+ 
+ /* The printer routines. */
+ 
+diff --git a/print-vsock.c b/print-vsock.c
+new file mode 100644
+index 0000000..b8dbb6e
+--- /dev/null
++++ b/print-vsock.c
+@@ -0,0 +1,211 @@
++/*
++ * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997
++ *	The Regents of the University of California.  All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that: (1) source code distributions
++ * retain the above copyright notice and this paragraph in its entirety, (2)
++ * distributions including binary code include the above copyright notice and
++ * this paragraph in its entirety in the documentation or other materials
++ * provided with the distribution, and (3) all advertising materials mentioning
++ * features or use of this software display the following acknowledgement:
++ * ``This product includes software developed by the University of California,
++ * Lawrence Berkeley Laboratory and its contributors.'' Neither the name of
++ * the University nor the names of its contributors may be used to endorse
++ * or promote products derived from this software without specific prior
++ * written permission.
++ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
++ * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
++ */
++
++#ifdef HAVE_CONFIG_H
++#include "config.h"
++#endif
++
++#include <netdissect-stdinc.h>
++#include <stddef.h>
++
++#include "netdissect.h"
++#include "extract.h"
++
++static const char tstr[] = " [|vsock]";
++
++enum af_vsockmon_t {
++	AF_VSOCK_T_UNKNOWN = 0,
++	AF_VSOCK_T_NO_INFO = 1,		/* No transport information */
++	AF_VSOCK_T_VIRTIO = 2,		/* Virtio transport header */
++};
++
++static const struct tok vsock_type[] = {
++    {AF_VSOCK_T_UNKNOWN, "UNKNOWN"},
++    {AF_VSOCK_T_NO_INFO, "NO_INFO"},
++    {AF_VSOCK_T_VIRTIO, "VIRTIO"},
++	{ 0, NULL }
++};
++
++enum af_vsockmon_op {
++	AF_VSOCK_OP_UNKNOWN = 0,
++	AF_VSOCK_OP_CONNECT = 1,
++	AF_VSOCK_OP_DISCONNECT = 2,
++	AF_VSOCK_OP_CONTROL = 3,
++	AF_VSOCK_OP_PAYLOAD = 4,
++};
++
++static const struct tok vsock_op[] = {
++    {AF_VSOCK_OP_UNKNOWN, "UNKNOWN"},
++    {AF_VSOCK_OP_CONNECT, "CONNECT"},
++    {AF_VSOCK_OP_DISCONNECT, "DISCONNECT"},
++    {AF_VSOCK_OP_CONTROL, "CONTROL"},
++    {AF_VSOCK_OP_PAYLOAD, "PAYLOAD"},
++	{ 0, NULL }
++};
++
++enum virtio_vsock_type {
++	VIRTIO_VSOCK_TYPE_STREAM = 1,
++};
++
++static const struct tok virtio_type[] = {
++    {VIRTIO_VSOCK_TYPE_STREAM, "STREAM"},
++	{ 0, NULL }
++};
++
++enum virtio_vsock_op {
++	VIRTIO_VSOCK_OP_INVALID = 0,
++	VIRTIO_VSOCK_OP_REQUEST = 1,
++	VIRTIO_VSOCK_OP_RESPONSE = 2,
++	VIRTIO_VSOCK_OP_RST = 3,
++	VIRTIO_VSOCK_OP_SHUTDOWN = 4,
++	VIRTIO_VSOCK_OP_RW = 5,
++	VIRTIO_VSOCK_OP_CREDIT_UPDATE = 6,
++	VIRTIO_VSOCK_OP_CREDIT_REQUEST = 7,
++};
++
++static const struct tok virtio_op[] = {
++    {VIRTIO_VSOCK_OP_INVALID, "INVALID"},
++    {VIRTIO_VSOCK_OP_REQUEST, "REQUEST"},
++    {VIRTIO_VSOCK_OP_RESPONSE, "RESPNOSE"},
++    {VIRTIO_VSOCK_OP_RST, "RST"},
++    {VIRTIO_VSOCK_OP_SHUTDOWN, "SHUTDOWN"},
++    {VIRTIO_VSOCK_OP_RW, "RW"},
++    {VIRTIO_VSOCK_OP_CREDIT_UPDATE, "CREDIT UPDATE"},
++    {VIRTIO_VSOCK_OP_CREDIT_REQUEST, "CREDIT REQUEST"},
++	{ 0, NULL }
++};
++
++struct virtio_vsock_hdr {
++	uint64_t	src_cid;
++	uint64_t	dst_cid;
++	uint32_t	src_port;
++	uint32_t	dst_port;
++	uint32_t	len;
++	uint16_t	type;		/* enum virtio_vsock_type */
++	uint16_t	op;		    /* enum virtio_vsock_op */
++	uint32_t	flags;
++	uint32_t	buf_alloc;
++	uint32_t	fwd_cnt;
++};
++
++// Little-endian
++struct af_vsockmon_hdr {
++	uint64_t src_cid;
++	uint32_t src_port;
++	uint64_t dst_cid;
++	uint32_t dst_port;
++	uint16_t op;			/* enum af_vsockmon_op */
++	uint16_t t;			    /* enum af_vosckmon_t */
++	union {
++		struct virtio_vsock_hdr virtio_hdr;
++	} t_hdr;
++};
++
++static void
++vsock_virtio_hdr_print(netdissect_options *ndo, const struct virtio_vsock_hdr *hdr)
++{
++    uint16_t u16_v;
++    uint32_t u32_v;
++
++    u32_v = EXTRACT_LE_32BITS(&hdr->len);
++    ND_PRINT((ndo, "len %u", u32_v));
++
++    u16_v = EXTRACT_LE_16BITS(&hdr->type);
++    ND_PRINT((ndo, ", type %s", tok2str(virtio_type, "Invalid type (%hu)", u16_v)));
++
++    u16_v = EXTRACT_LE_16BITS(&hdr->op);
++    ND_PRINT((ndo, ", op %s", tok2str(virtio_op, "Invalid op (%hu)", u16_v)));
++
++    u32_v = EXTRACT_LE_32BITS(&hdr->flags);
++    ND_PRINT((ndo, ", flags %x", u32_v));
++
++    u32_v = EXTRACT_LE_32BITS(&hdr->buf_alloc);
++    ND_PRINT((ndo, ", buf_alloc %u", u32_v));
++
++    u32_v = EXTRACT_LE_32BITS(&hdr->fwd_cnt);
++    ND_PRINT((ndo, ", fwd_cnt %u", u32_v));
++}
++
++
++static void
++vsock_hdr_print(netdissect_options *ndo, const u_char *p, const u_int len)
++{
++    uint16_t hdr_t, hdr_op;
++    uint32_t hdr_src_port, hdr_dst_port;
++    uint64_t hdr_src_cid, hdr_dst_cid;
++
++    const struct af_vsockmon_hdr *hdr = (struct af_vsockmon_hdr *) p;
++    const u_char *payload;
++
++    hdr_t = EXTRACT_LE_16BITS(&hdr->t);
++	ND_PRINT((ndo, "%s", tok2str(vsock_type, "Invalid type (%u)", hdr_t)));
++
++    /* If verbose level is more than 0 print transport details */
++    if (ndo->ndo_vflag) {
++        switch (hdr_t) {
++            case AF_VSOCK_T_VIRTIO:
++                ND_PRINT((ndo, " ("));
++                vsock_virtio_hdr_print(ndo, &hdr->t_hdr.virtio_hdr);
++                ND_PRINT((ndo, ")"));
++                break;
++            default:
++                break;
++        }
++
++        ND_PRINT((ndo, "\n\t"));
++    } else {
++        ND_PRINT((ndo, " "));
++    }
++
++    hdr_src_cid = EXTRACT_LE_64BITS(&hdr->src_cid);
++    hdr_src_port = EXTRACT_LE_32BITS(&hdr->src_port);
++    hdr_dst_cid = EXTRACT_LE_64BITS(&hdr->dst_cid);
++    hdr_dst_port = EXTRACT_LE_32BITS(&hdr->dst_port);
++    hdr_op = EXTRACT_LE_16BITS(&hdr->op);
++    ND_PRINT((ndo, "%lu.%hu > %lu.%hu %s, length %u",
++                hdr->src_cid, hdr->src_port,
++                hdr->dst_cid, hdr->dst_port,
++	            tok2str(vsock_op, " invalid op (%u)", hdr->op),
++                len));
++
++    /* If debug level is more than 1 print payload contents */
++    if (ndo->ndo_vflag > 1 &&
++            hdr_op == AF_VSOCK_OP_PAYLOAD &&
++            len > sizeof(struct af_vsockmon_hdr)) {
++        ND_PRINT((ndo, "\n"));
++        payload = p + sizeof(struct af_vsockmon_hdr);
++        print_unknown_data(ndo, payload, "\t", len - sizeof(struct af_vsockmon_hdr));
++    }
++}
++
++u_int
++vsock_print(netdissect_options *ndo, const struct pcap_pkthdr *h, const u_char *cp)
++{
++    u_int len = h->len;
++
++    if (len < sizeof(struct af_vsockmon_hdr)) {
++        ND_PRINT((ndo, "%s", tstr));
++    } else {
++        vsock_hdr_print(ndo, cp, len);
++    }
++
++    return len;
++}
+diff --git a/print.c b/print.c
+index 9fedd9f..279359b 100644
+--- a/print.c
++++ b/print.c
+@@ -220,6 +220,9 @@ static const struct printer printers[] = {
+ #ifdef DLT_PPP_SERIAL
+ 	{ ppp_hdlc_if_print,	DLT_PPP_SERIAL },
+ #endif
++#ifdef DLT_USER0
++    { vsock_print,	DLT_USER0},
++#endif
+ 	{ NULL,			0 },
+ };
+ 
+-- 
+2.9.0
+
