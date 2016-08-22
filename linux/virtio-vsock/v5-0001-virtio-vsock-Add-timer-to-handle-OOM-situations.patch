@@ -1,14 +1,20 @@
-From dd8e56827c95ba746e9fc7cf6408ee7feac55389 Mon Sep 17 00:00:00 2001
+From 99582a4647aadf186c97b9b84407bd1a75b0878a Mon Sep 17 00:00:00 2001
 From: Gerard Garcia <ggarcia@deic.uab.cat>
 Date: Thu, 21 Jul 2016 17:27:46 +0200
-Subject: [PATCH v4 1/1] Add timer to handle OOM situations
+Subject: [PATCH v5] virtio-vsock: Add timer to handle OOM situations
 
-Set up a rx timer to avoid packets being discarded when there is not 
+Set up a rx timer to avoid packets being discarded when there is no 
 available memory in the host.
 
 Signed-off-by: Gerard Garcia <ggarcia@deic.uab.cat>
+Reviewed-by: Stefan Hajnoczi <stefanha@redhat.com>
 
 ---
+Applies over mst/vhost: http://git.kernel.org/cgit/linux/kernel/git/mst/vhost.git
+
+v5:
+ * Add subsystem prefix.
+
 v4:
  * Fix style.
 
@@ -24,7 +30,7 @@ v2:
  1 file changed, 40 insertions(+), 9 deletions(-)
 
 diff --git a/drivers/vhost/vsock.c b/drivers/vhost/vsock.c
-index 028ca16..eccb84d 100644
+index e3b30ea..3fdaf31 100644
 --- a/drivers/vhost/vsock.c
 +++ b/drivers/vhost/vsock.c
 @@ -15,11 +15,13 @@
@@ -99,7 +105,7 @@ index 028ca16..eccb84d 100644
  	}
  
  	return pkt;
-@@ -329,9 +333,25 @@ static void vhost_vsock_handle_tx_kick(struct vhost_work *work)
+@@ -331,9 +335,25 @@ static void vhost_vsock_handle_tx_kick(struct vhost_work *work)
  		}
  
  		pkt = vhost_vsock_alloc_pkt(vq, out, in);
@@ -127,8 +133,8 @@ index 028ca16..eccb84d 100644
 +			del_timer(&vsock->tx_kick);
  		}
  
- 		/* Only accept correctly addressed packets */
-@@ -352,6 +372,13 @@ out:
+ 		len = pkt->len;
+@@ -356,6 +376,13 @@ out:
  	mutex_unlock(&vq->mutex);
  }
  
@@ -142,7 +148,7 @@ index 028ca16..eccb84d 100644
  static void vhost_vsock_handle_rx_kick(struct vhost_work *work)
  {
  	struct vhost_virtqueue *vq = container_of(work, struct vhost_virtqueue,
-@@ -464,6 +491,9 @@ static int vhost_vsock_dev_open(struct inode *inode, struct file *file)
+@@ -465,6 +492,9 @@ static int vhost_vsock_dev_open(struct inode *inode, struct file *file)
  
  	atomic_set(&vsock->queued_replies, 0);
  
@@ -152,7 +158,7 @@ index 028ca16..eccb84d 100644
  	vqs[VSOCK_VQ_TX] = &vsock->vqs[VSOCK_VQ_TX];
  	vqs[VSOCK_VQ_RX] = &vsock->vqs[VSOCK_VQ_RX];
  	vsock->vqs[VSOCK_VQ_TX].handle_kick = vhost_vsock_handle_tx_kick;
-@@ -527,6 +557,7 @@ static int vhost_vsock_dev_release(struct inode *inode, struct file *file)
+@@ -528,6 +558,7 @@ static int vhost_vsock_dev_release(struct inode *inode, struct file *file)
  	vsock_for_each_connected_socket(vhost_vsock_reset_orphans);
  
  	vhost_vsock_stop(vsock);

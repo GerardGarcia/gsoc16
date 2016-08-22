@@ -1,7 +1,7 @@
-From c743a7cf80e316d17638c7b5199958a78e6869a0 Mon Sep 17 00:00:00 2001
+From 444fd32811d58c39bdbd4512f6beb35cabc8789c Mon Sep 17 00:00:00 2001
 From: Gerard Garcia <ggarcia@deic.uab.cat>
 Date: Fri, 5 Aug 2016 18:47:52 +0200
-Subject: [PATCH 1/3] vsockmon: Add tap functions.
+Subject: [PATCH v2 1/3] VSOCK: Add vsockmon tap functions
 
 Add tap functions that can be used by the vsock transports to
 deliver packets to vsockmon virtual network devices.
@@ -11,8 +11,8 @@ Signed-off-by: Gerard Garcia <ggarcia@deic.uab.cat>
  include/net/af_vsock.h       |  13 +++++
  include/uapi/linux/if_arp.h  |   1 +
  net/vmw_vsock/Makefile       |   2 +-
- net/vmw_vsock/af_vsock_tap.c | 114 +++++++++++++++++++++++++++++++++++++++++++
- 4 files changed, 129 insertions(+), 1 deletion(-)
+ net/vmw_vsock/af_vsock_tap.c | 113 +++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 128 insertions(+), 1 deletion(-)
  create mode 100644 net/vmw_vsock/af_vsock_tap.c
 
 diff --git a/include/net/af_vsock.h b/include/net/af_vsock.h
@@ -64,10 +64,10 @@ index bc27c70..09fc2eb 100644
  	vmci_transport_notify_qstate.o
 diff --git a/net/vmw_vsock/af_vsock_tap.c b/net/vmw_vsock/af_vsock_tap.c
 new file mode 100644
-index 0000000..427b3b3
+index 0000000..ff242b1
 --- /dev/null
 +++ b/net/vmw_vsock/af_vsock_tap.c
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,113 @@
 +/*
 + * Tap functions for AF_VSOCK sockets.
 + *
@@ -141,16 +141,13 @@ index 0000000..427b3b3
 +				     struct net_device *dev)
 +{
 +	int ret = 0;
++	struct sk_buff *nskb = skb_clone(skb, GFP_ATOMIC);
 +
-+	if (skb) {
++	if (nskb) {
 +		dev_hold(dev);
-+		/* Take skb ownership so it is not consumed in dev_queue_xmit.
-+		 * dev_queue_xmit will drop a reference so the reference count
-+		 * will reset.
-+		 */
-+		skb_get(skb);
-+		skb->dev = dev;
-+		ret = dev_queue_xmit(skb);
++
++		nskb->dev = dev;
++		ret = dev_queue_xmit(nskb);
 +		if (unlikely(ret > 0))
 +			ret = net_xmit_errno(ret);
 +
@@ -170,6 +167,8 @@ index 0000000..427b3b3
 +		if (unlikely(ret))
 +			break;
 +	}
++
++	consume_skb(skb);
 +}
 +
 +void vsock_deliver_tap(struct sk_buff *skb)

@@ -14,6 +14,7 @@ Each folder contains the patches sent to each of the projects.
     * RFC: http://marc.info/?l=linux-netdev&m=146445657415137&w=2
     * RFC v2: http://marc.info/?l=linux-netdev&m=146661193816961&w=2
     * PATCH: http://marc.info/?l=linux-netdev&m=147067289819024&w=2
+    * PATCH v2: http://marc.info/?l=linux-netdev&m=147108373229560&w=2
 
 * wireshark: Wireshark dissector for the vsockmon virtual network device, merged.
 
@@ -27,12 +28,12 @@ Each folder contains the patches sent to each of the projects.
     * RFC: http://lists.sandelman.ca/pipermail/tcpdump-workers/2016-June/000546.html
     * Identifier request: http://lists.sandelman.ca/pipermail/tcpdump-workers/2016-July/000592.html
 
-* linux/virtio-vsock: Several patches related to the virtio transport. As of 10-08-2016 still not merged..
+* linux/virtio-vsock: Several patches related to the virtio transport. 
 
     Related links:
-    * VSOCK-remove-more-space-available-check-filling-TX-vq: http://marc.info/?l=linux-netdev&m=147041487402313&w=2
-    * Add-timer-to-handle-OOM-situations: http://marc.info/?l=linux-netdev&m=147031989408785&w=2
-    * Fix-unbound-rx-buffer: http://marc.info/?l=linux-netdev&m=147031984808760&w=2
+    * (merged) VSOCK-remove-more-space-available-check-filling-TX-vq: http://marc.info/?l=linux-netdev&m=147085351302516&w=2
+    * Add-timer-to-handle-OOM-situations: http://marc.info/?l=linux-netdev&m=147101054013730&w=2
+    * Fix-unbound-rx-buffer: http://marc.info/?l=linux-netdev&m=147101057413742&w=2
 
 ### Project proposal
 

@@ -1,7 +1,7 @@
-From cd5c8c7c134cb2f86d46c65cf2eb547fd80eacab Mon Sep 17 00:00:00 2001
+From dad13665a4dbe53eebb75ee5ec5b2bd1aea6b320 Mon Sep 17 00:00:00 2001
 From: Gerard Garcia <ggarcia@deic.uab.cat>
 Date: Fri, 5 Aug 2016 16:39:43 +0200
-Subject: [PATCH 1/1] VSOCK: remove more space available check filling TX vq
+Subject: [PATCH v2 1/1] VSOCK: remove more space available check filling TX vq
 
 Remove unnecessary use of enable/disable callback notifications
 and the incorrect more space available check.
@@ -10,12 +10,17 @@ The virtio_transport_tx_work handles when the TX virtqueue
 has more buffers available.
 
 Signed-off-by: Gerard Garcia <ggarcia@deic.uab.cat>
+Acked-by: Stefan Hajnoczi <stefanha@redhat.com>
 ---
- net/vmw_vsock/virtio_transport.c | 9 ++-------
- 1 file changed, 2 insertions(+), 7 deletions(-)
+
+v2:
+ * Comment style.
+
+ net/vmw_vsock/virtio_transport.c | 10 +++-------
+ 1 file changed, 3 insertions(+), 7 deletions(-)
 
 diff --git a/net/vmw_vsock/virtio_transport.c b/net/vmw_vsock/virtio_transport.c
-index 699dfab..b7a1055 100644
+index 699dfab..936d7ee 100644
 --- a/net/vmw_vsock/virtio_transport.c
 +++ b/net/vmw_vsock/virtio_transport.c
 @@ -87,9 +87,6 @@ virtio_transport_send_pkt_work(struct work_struct *work)
@@ -36,12 +41,13 @@ index 699dfab..b7a1055 100644
  			break;
  		}
  
-@@ -118,13 +114,12 @@ virtio_transport_send_pkt_work(struct work_struct *work)
+@@ -118,13 +114,13 @@ virtio_transport_send_pkt_work(struct work_struct *work)
  		}
  
  		ret = virtqueue_add_sgs(vq, sgs, out_sg, in_sg, pkt, GFP_KERNEL);
 +		/* Usually this means that there is no more space available in
-+		 * the vq */
++		 * the vq
++		 */
  		if (ret < 0) {
  			spin_lock_bh(&vsock->send_pkt_list_lock);
  			list_add(&pkt->list, &vsock->send_pkt_list);

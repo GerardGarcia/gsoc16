@@ -1,7 +1,7 @@
-From 3895356b3a65004e64a065ff826714b110cada7e Mon Sep 17 00:00:00 2001
+From 530bd563a522ea5f1986f094d5c996d4605b6c4f Mon Sep 17 00:00:00 2001
 From: Gerard Garcia <ggarcia@deic.uab.cat>
 Date: Fri, 5 Aug 2016 18:52:28 +0200
-Subject: [PATCH 2/3] vsockmon: Add vsockmon device.
+Subject: [PATCH v2 2/3] VSOCK: Add vsockmon device
 
 Add vsockmon virtual network device that receives packets from the vsock
 transports and exposes them to user space.
@@ -14,8 +14,8 @@ Signed-off-by: Gerard Garcia <ggarcia@deic.uab.cat>
  drivers/net/Makefile          |   1 +
  drivers/net/vsockmon.c        | 168 ++++++++++++++++++++++++++++++++++++++++++
  include/uapi/linux/Kbuild     |   1 +
- include/uapi/linux/vsockmon.h |  35 +++++++++
- 5 files changed, 213 insertions(+)
+ include/uapi/linux/vsockmon.h |  38 ++++++++++
+ 5 files changed, 216 insertions(+)
  create mode 100644 drivers/net/vsockmon.c
  create mode 100644 include/uapi/linux/vsockmon.h
 
@@ -225,29 +225,35 @@ index 0000000..9ad4f0a
 +MODULE_DESCRIPTION("Vsock monitoring device. Based on nlmon device.");
 +MODULE_ALIAS_RTNL_LINK("vsockmon");
 diff --git a/include/uapi/linux/Kbuild b/include/uapi/linux/Kbuild
-index 3cf0116..380f485 100644
+index 185f8ea..ef7f878 100644
 --- a/include/uapi/linux/Kbuild
 +++ b/include/uapi/linux/Kbuild
-@@ -455,6 +455,7 @@ header-y += virtio_scsi.h
+@@ -456,6 +456,7 @@ header-y += virtio_scsi.h
  header-y += virtio_types.h
  header-y += virtio_vsock.h
  header-y += vm_sockets.h
 +header-y += vsockmon.h
  header-y += vt.h
+ header-y += vtpm_proxy.h
  header-y += wait.h
- header-y += wanrouter.h
 diff --git a/include/uapi/linux/vsockmon.h b/include/uapi/linux/vsockmon.h
 new file mode 100644
-index 0000000..739b4bf
+index 0000000..0e9c54e
 --- /dev/null
 +++ b/include/uapi/linux/vsockmon.h
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,38 @@
 +#ifndef _UAPI_VSOCKMON_H
 +#define _UAPI_VSOCKMON_H
 +
 +#include <linux/virtio_vsock.h>
 +
-+/* Structure of packets received trought the vsockmon device. */
++/*
++ * Structure of packets received through the vsockmon device.
++ *
++ * Note that after the vsockmon header comes the transport header (len bytes and
++ * type specified by t) and if the packet op is AF_VSOCK_OP_PAYLOAD then comes
++ * the payload.
++ */
 +
 +struct af_vsockmon_hdr {
 +	__le64 src_cid;
@@ -256,10 +262,7 @@ index 0000000..739b4bf
 +	__le32 dst_port;
 +	__le16 op;			/* enum af_vsockmon_op */
 +	__le16 t;			/* enum af_vosckmon_t */
-+	__le16 len;			/* sizeof(t_hdr) */
-+	union {
-+		struct virtio_vsock_hdr virtio_hdr;
-+	} t_hdr;
++	__le16 len;			/* Transport header length */
 +} __attribute__((packed));
 +
 +enum af_vsockmon_op {
@@ -273,7 +276,7 @@ index 0000000..739b4bf
 +enum af_vsockmon_t {
 +	AF_VSOCK_T_UNKNOWN = 0,
 +	AF_VSOCK_T_NO_INFO = 1,		/* No transport information */
-+	AF_VSOCK_T_VIRTIO = 2,		/* Virtio transport header */
++	AF_VSOCK_T_VIRTIO = 2,		/* Virtio transport header (struct virtio_vsock_hdr) */
 +};
 +
 +#endif

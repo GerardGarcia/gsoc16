@@ -1,13 +1,20 @@
-From c9a07cdc46d3b70549673042bfc0b8678bce12e3 Mon Sep 17 00:00:00 2001
+From 78348fc260d638ea355b1db657ada51d75c06a87 Mon Sep 17 00:00:00 2001
 From: Gerard Garcia <ggarcia@deic.uab.cat>
 Date: Mon, 1 Aug 2016 17:08:35 +0200
-Subject: [PATCH v2 1/1] Fix unbound rx buffer
+Subject: [PATCH v3] virtio-vsock: Fix unbound rx buffer
 
-Reset connection and close rx socket when the sender is ignoring our announced available buffer.
+Reset connection and close rx socket when the sender is ignoring our announced
+available buffer.
 
 Signed-off-by: Gerard Garcia <ggarcia@deic.uab.cat>
+Acked-by: Stefan Hajnoczi <stefanha@redhat.com>
 
 ---
+Applies over mst/vhost: http://git.kernel.org/cgit/linux/kernel/git/mst/vhost.git
+
+v3:
+ * Add subsystem prefix.
+
 v2:
  * Get vvs->rx_lock lock before checking if next packet is going to
     overflow the rx buffer.

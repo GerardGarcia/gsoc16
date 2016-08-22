@@ -1,7 +1,7 @@
-From a54a389733bf09bdb254aa4b06976d33d1a05c22 Mon Sep 17 00:00:00 2001
+From 4ce5e4692e7c27f516d06e95fa677b039c1c1df3 Mon Sep 17 00:00:00 2001
 From: Gerard Garcia <ggarcia@deic.uab.cat>
 Date: Mon, 8 Aug 2016 17:03:05 +0200
-Subject: [PATCH 3/3] vsockmon: Add virtio vsock hooks
+Subject: [PATCH v2 3/3] VSOCK: Add virtio vsock vsockmon hooks
 
 Add hooks to the virtio transport host driver to deliver a copy of
 the received and sent messages to all vsockmon virtual network devices.
@@ -12,7 +12,7 @@ Signed-off-by: Gerard Garcia <ggarcia@deic.uab.cat>
  1 file changed, 72 insertions(+)
 
 diff --git a/drivers/vhost/vsock.c b/drivers/vhost/vsock.c
-index 0ddf3a2..75b5a46 100644
+index e3b30ea..4670c3c 100644
 --- a/drivers/vhost/vsock.c
 +++ b/drivers/vhost/vsock.c
 @@ -15,8 +15,10 @@
@@ -31,13 +31,14 @@ index 0ddf3a2..75b5a46 100644
  };
  
 +static struct sk_buff *
-+virtio_vsock_pkt_vsockmon_to_vsockmon_skb(struct virtio_vsock_pkt *pkt)
++virtio_vsock_pkt_to_vsockmon_skb(struct virtio_vsock_pkt *pkt)
 +{
 +	struct sk_buff *skb;
 +	struct af_vsockmon_hdr *hdr;
-+	void *payload;
++	unsigned char *t_hdr, *payload;
 +
-+	u32 skb_len = sizeof(struct af_vsockmon_hdr) + pkt->len;
++	u32 skb_len = sizeof(*hdr) + sizeof(pkt->hdr) +
++		pkt->len;
 +
 +	skb = alloc_skb(skb_len, GFP_ATOMIC);
 +	if (!skb)
@@ -50,9 +51,9 @@ index 0ddf3a2..75b5a46 100644
 +	hdr->dst_cid = pkt->hdr.dst_cid;
 +	hdr->dst_port = pkt->hdr.dst_port;
 +	hdr->t = cpu_to_le16(AF_VSOCK_T_VIRTIO);
-+	hdr->len = cpu_to_le16(sizeof(hdr->t_hdr));
++	hdr->len = cpu_to_le16(sizeof(pkt->hdr));
 +
-+	switch(pkt->hdr.op) {
++	switch(cpu_to_le16(pkt->hdr.op)) {
 +	case VIRTIO_VSOCK_OP_REQUEST:
 +	case VIRTIO_VSOCK_OP_RESPONSE:
 +		hdr->op = cpu_to_le16(AF_VSOCK_OP_CONNECT);
@@ -73,7 +74,8 @@ index 0ddf3a2..75b5a46 100644
 +		break;
 +	}
 +
-+	hdr->t_hdr.virtio_hdr = pkt->hdr;
++	t_hdr = skb_put(skb, sizeof(pkt->hdr));
++	memcpy(t_hdr, &pkt->hdr, sizeof(pkt->hdr));
 +
 +	if (pkt->len) {
 +		payload = skb_put(skb, pkt->len);
@@ -86,10 +88,8 @@ index 0ddf3a2..75b5a46 100644
 +static void vsock_deliver_tap_pkt(struct virtio_vsock_pkt *pkt)
 +{
 +	struct sk_buff *skb = virtio_vsock_pkt_to_vsockmon_skb(pkt);
-+	if (skb) {
++	if (skb)
 +		vsock_deliver_tap(skb);
-+		kfree_skb(skb);
-+	}
 +}
 +
  static u32 vhost_transport_get_local_cid(void)
@@ -107,9 +107,9 @@ index 0ddf3a2..75b5a46 100644
  		virtio_transport_free_pkt(pkt);
  	}
  	if (added)
-@@ -334,6 +403,9 @@ static void vhost_vsock_handle_tx_kick(struct vhost_work *work)
- 			continue;
- 		}
+@@ -338,6 +407,9 @@ static void vhost_vsock_handle_tx_kick(struct vhost_work *work)
+ 
+ 		len = pkt->len;
  
 +		/* Deliver to monitoring devices all received packets */
 +		vsock_deliver_tap_pkt(pkt);
